@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Учет позиций</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+
+      body {
+        margin: 0;
+        padding: 16px;
+        background-color: #f4f4f9;
+        color: #333;
+        display: flex;
+        justify-content: center;
+      }
+
+      .container {
+        width: 100%;
+        max-width: 480px;
+        background: #fff;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+      }
+
+      h2 {
+        margin-top: 0;
+        font-size: 1.25rem;
+        text-align: center;
+      }
+
+      .form-group {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin-bottom: 20px;
+      }
+
+      input {
+        width: 100%;
+        padding: 14px;
+        font-size: 16px; /* Предотвращает авто-зум на iOS */
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        outline: none;
+      }
+
+      input:focus {
+        border-color: #0066cc;
+      }
+
+      /* Скрытая кнопка для гарантированной отправки по Enter на всех мобильных клавиатурах */
+      button[type="submit"] {
+        padding: 14px;
+        font-size: 16px;
+        font-weight: 600;
+        color: #fff;
+        background-color: #0066cc;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+      }
+
+      button[type="submit"]:active {
+        background-color: #0052a3;
+      }
+
+      ul {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+
+      li {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px 0;
+        border-bottom: 1px solid #eee;
+        gap: 10px;
+      }
+
+      .item-info {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .item-name {
+        font-weight: 600;
+        word-break: break-word;
+      }
+
+      .item-qty {
+        font-size: 0.9rem;
+        color: #666;
+      }
+
+      .delete-btn {
+        background: #ff4d4f;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        padding: 6px 10px;
+        font-size: 14px;
+        cursor: pointer;
+      }
+    </style>
+    <!-- Подключение внешнего скрипта после парсинга DOM -->
+    <script src="script.js" defer></script>
+  </head>
+  <body>
+    <div class="container">
+      <h2>Добавление позиции</h2>
+
+      <form id="dataForm" class="form-group">
+        <input
+          type="text"
+          id="itemName"
+          placeholder="Наименование"
+          autocomplete="off"
+          required
+        />
+        <input
+          type="number"
+          id="itemQty"
+          placeholder="Количество в граммах!"
+          inputmode="numeric"
+          min="1"
+          required
+        />
+        <button type="submit">Добавить</button>
+      </form>
+
+      <ul id="itemsList"></ul>
+    </div>
+  </body>
+</html>
