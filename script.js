@@ -5,7 +5,7 @@ const FIREBASE_DB_URL =
   "https://inventory-feola-default-rtdb.europe-west1.firebasedatabase.app";
 const ITEMS_ENDPOINT = `${FIREBASE_DB_URL}/items.json`;
 
-// Единый объект базы данных (ключ -> объект позиции)
+// Единый объект базы данных
 let appDatabase = {
   items: {},
 };
@@ -15,13 +15,25 @@ const form = document.getElementById("dataForm");
 const nameInput = document.getElementById("itemName");
 const qtyInput = document.getElementById("itemQty");
 const itemsList = document.getElementById("itemsList");
+const exportBtn = document.getElementById("exportBtn");
+const clearAllBtn = document.getElementById("clearAllBtn");
 
-// Вспомогательная функция: превращает название в безопасный ключ для базы
+// Превращает название в безопасный ключ для базы
 function createSafeKey(name) {
   return name
     .trim()
     .toLowerCase()
     .replace(/[.#$/[\]]/g, "_");
+}
+
+// Возвращает отсортированный по алфавиту массив записей
+function getSortedEntries() {
+  return Object.entries(appDatabase.items).sort(([, a], [, b]) => {
+    return a.name.localeCompare(b.name, "ru", {
+      numeric: true,
+      sensitivity: "base",
+    });
+  });
 }
 
 // 1. Загрузка локального кэша
@@ -48,13 +60,13 @@ function saveLocalCache() {
   }
 }
 
-// 3. Точечная отправка изменений в Firebase (PATCH не затирает чужие записи)
+// 3. Точечная отправка изменений в Firebase
 async function syncItemToCloud(key, itemData) {
   try {
     await fetch(ITEMS_ENDPOINT, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ [key]: itemData }), // Если itemData === null, Firebase удалит ключ
+      body: JSON.stringify({ [key]: itemData }),
     });
   } catch (error) {
     console.error("Ошибка синхронизации с облаком:", error);
@@ -65,7 +77,6 @@ async function syncItemToCloud(key, itemData) {
 function subscribeToRealtimeUpdates() {
   const eventSource = new EventSource(ITEMS_ENDPOINT);
 
-  // Первичная загрузка или полная перезапись ветки
   eventSource.addEventListener("put", (event) => {
     try {
       const payload = JSON.parse(event.data);
@@ -77,7 +88,6 @@ function subscribeToRealtimeUpdates() {
     }
   });
 
-  // Точечное обновление от других телефонов
   eventSource.addEventListener("patch", (event) => {
     try {
       const payload = JSON.parse(event.data);
@@ -102,19 +112,10 @@ function subscribeToRealtimeUpdates() {
   };
 }
 
-// 5. Отрисовка списка с сортировкой по алфавиту
+// 5. Отрисовка списка
 function renderList() {
   itemsList.innerHTML = "";
-
-  // Получаем массив записей и сортируем по алфавиту (с учетом кириллицы и цифр)
-  const sortedEntries = Object.entries(appDatabase.items).sort(
-    ([, a], [, b]) => {
-      return a.name.localeCompare(b.name, "ru", {
-        numeric: true,
-        sensitivity: "base",
-      });
-    },
-  );
+  const sortedEntries = getSortedEntries();
 
   sortedEntries.forEach(([key, item]) => {
     const li = document.createElement("li");
@@ -168,7 +169,7 @@ function addItem(name, quantity) {
   syncItemToCloud(key, updatedItem);
 }
 
-// 7. Удаление позиции
+// 7. Удаление одной позиции
 function removeItem(key) {
   delete appDatabase.items[key];
   saveLocalCache();
@@ -176,7 +177,69 @@ function removeItem(key) {
   syncItemToCloud(key, null);
 }
 
-// Обработка отправки формы
+// 8. Выгрузка в CSV (открывается в Excel)
+function exportToCSV() {
+  const sortedEntries = getSortedEntries();
+  if (sortedEntries.length === 0) {
+    alert("Список пуст. Нечего выгружать.");
+    return;
+  }
+
+  // Заголовки столбцов (разделитель ";" для корректного открытия в русском Excel)
+  const rows = [["Наименование", "Количество"]];
+
+  sortedEntries.forEach(([, item]) => {
+    // Экранируем кавычки в названии, если они есть
+    const safeName = `"${item.name.replace(/"/g, '""')}"`;
+    rows.push([safeName, item.quantity]);
+  });
+
+  // \uFEFF — метка BOM для правильного отображения кириллицы в Excel
+  const csvContent = "\uFEFF" + rows.map((row) => row.join(";")).join("\n");
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+
+  const link = document.createElement("a");
+  const today = new Date().toISOString().slice(0, 10);
+  link.href = url;
+  link.download = `inventory_${today}.csv`;
+  document.body.appendChild(link);
+  link.click();
+
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+// 9. Полная очистка базы с защитой от случайного нажатия
+async function clearDatabase() {
+  if (Object.keys(appDatabase.items).length === 0) {
+    alert("База уже пуста.");
+    return;
+  }
+
+  const firstConfirm = confirm(
+    "Вы точно хотите удалить ВСЕ позиции из общей базы?",
+  );
+  if (!firstConfirm) return;
+
+  const secondConfirm = confirm(
+    "Данные пропадут на всех подключенных телефонах без возможности восстановления. Продолжить?",
+  );
+  if (!secondConfirm) return;
+
+  appDatabase.items = {};
+  saveLocalCache();
+  renderList();
+
+  try {
+    await fetch(ITEMS_ENDPOINT, { method: "DELETE" });
+  } catch (error) {
+    console.error("Ошибка при очистке базы в облаке:", error);
+    alert("Не удалось очистить облако. Проверьте интернет-соединение.");
+  }
+}
+
+// Обработчики событий
 form.addEventListener("submit", (event) => {
   event.preventDefault();
 
@@ -187,13 +250,15 @@ form.addEventListener("submit", (event) => {
   nameInput.focus();
 });
 
-// Переход по Enter из первого поля во второе
 nameInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") {
     event.preventDefault();
     qtyInput.focus();
   }
 });
+
+exportBtn.addEventListener("click", exportToCSV);
+clearAllBtn.addEventListener("click", clearDatabase);
 
 // Старт приложения
 loadLocalCache();
